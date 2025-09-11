@@ -207,12 +207,21 @@ def register_routes(app: Flask) -> None:
     @app.get("/api/videos")
     def list_videos():
         has_comments = (request.args.get("has_comments") or "1") not in ("0", "false", "False")
+        yt_disabled_param = (request.args.get("yt_disabled") or "").strip().lower()
         limit = int(request.args.get("limit", "50"))
         q = db.session.query(
             Video,
             db.func.count(Comment.id).label("comment_count"),
             db.func.max(Comment.created_at).label("last_comment_at"),
         ).outerjoin(Comment, Comment.video_id == Video.id).group_by(Video.id)
+
+        # Filter by YouTube comments disabled flag when explicitly requested
+        if yt_disabled_param in ("1", "true"):  # only disabled
+            q = q.filter(Video.yt_comments_disabled.is_(True))
+        elif yt_disabled_param in ("0", "false"):  # only enabled
+            q = q.filter(Video.yt_comments_disabled.is_(False))
+        # Else, when param omitted, include all (including unknown/null)
+
         if has_comments:
             q = q.having(db.func.count(Comment.id) > 0).order_by(db.func.max(Comment.created_at).desc())
         else:
@@ -435,7 +444,6 @@ def register_routes(app: Flask) -> None:
         return (
             "<script>window.opener && window.opener.postMessage({type:'wecomment_auth', token:'%s'}, '*');window.close();</script>" % jwt_token
         )
-
 
 app = create_app()
 

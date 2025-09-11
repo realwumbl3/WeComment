@@ -158,7 +158,8 @@
         if (!list) return;
         list.innerHTML = "<div>Loading…</div>";
         try {
-            const res = await fetch(`${backendBase}/api/videos?limit=100`);
+            // Only request videos where YouTube comments are disabled
+            const res = await fetch(`${backendBase}/api/videos?limit=100&yt_disabled=1`);
             const data = await res.json();
             const vids = data.videos || [];
             if (!vids.length) {
@@ -177,7 +178,7 @@
                     ? v.thumbnail_url
                     : `https://i.ytimg.com/vi/${encodeURIComponent(v.youtube_video_id)}/hqdefault.jpg`
             }" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-            <div style="position:absolute;left:8px;top:8px;background:rgba(58,42,0,.9);padding:2px 6px;border-radius:6px;font-size:12px;border:1px solid #5a4500;">YT disabled</div>
+            ${v.yt_comments_disabled ? `<div style="position:absolute;left:8px;top:8px;background:rgba(58,42,0,.9);padding:2px 6px;border-radius:6px;font-size:12px;border:1px solid #5a4500;">YT disabled</div>` : ""}
             <div style="position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.7);padding:2px 6px;border-radius:6px;font-size:12px;">${
                 v.comment_count || 0
             } comments</div>
