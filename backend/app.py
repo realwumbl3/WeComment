@@ -31,7 +31,7 @@ def create_app() -> Flask:
         try:
             engine = db.engine
             with engine.begin() as conn:
-                conn.execute(db.text("UPDATE video SET yt_comments_disabled = 1"))
+                pass
         except Exception:
             # Best-effort; ignore if cannot alter (e.g., permissions)
             pass
@@ -140,34 +140,59 @@ def register_routes(app: Flask) -> None:
         except Exception:
             return None
 
+    def _detect_youtube_comments_disabled(video_id: str) -> Optional[bool]:
+        api_key = Config.YOUTUBE_API_KEY
+        if not api_key:
+            return None
+        try:
+            res = requests.get(
+                "https://www.googleapis.com/youtube/v3/commentThreads",
+                params={
+                    "part": "id",
+                    "videoId": video_id,
+                    "maxResults": 1,
+                    "key": api_key,
+                },
+                timeout=10,
+            )
+            if res.status_code == 200:
+                # Comments are enabled (may be empty list but not disabled)
+                return False
+            if res.status_code == 403:
+                try:
+                    data = res.json() or {}
+                    errors = (data.get("error", {}).get("errors") or [])
+                    reason = (errors[0].get("reason") if errors else "") or ""
+                    if str(reason).lower() == "commentsdisabled":
+                        return True
+                except Exception:
+                    pass
+                return None
+            return None
+        except Exception:
+            return None
+
+            
+    # NEW RULES
+    # NEVER TRUST THE CLIENT
     @app.get("/api/videos/<youtube_video_id>")
     def get_video(youtube_video_id: str):
         video = Video.query.filter_by(youtube_video_id=youtube_video_id).first()
         if not video:
             meta = _fetch_youtube_video_meta(youtube_video_id)
+            yt_disabled = _detect_youtube_comments_disabled(youtube_video_id)
             video = Video(
                 youtube_video_id=youtube_video_id,
                 title=(meta or {}).get("title"),
                 channel_id=(meta or {}).get("channel_id"),
                 channel_title=(meta or {}).get("channel_title"),
                 thumbnail_url=(meta or {}).get("thumbnail_url"),
+                yt_comments_disabled=yt_disabled if yt_disabled is not None else None,
             )
             db.session.add(video)
             db.session.commit()
-        # Optionally update title and yt_disabled via query params when tracking
-        updated = False
-        title = request.args.get("title")
-        if title and title != video.title:
-            video.title = title
-            updated = True
-        yt_disabled_val = request.args.get("yt_disabled")
-        if yt_disabled_val is not None:
-            val = str(yt_disabled_val).lower() in ("1", "true", "yes", "y", "on")
-            if video.yt_comments_disabled is None or bool(video.yt_comments_disabled) != val:
-                video.yt_comments_disabled = val
-                updated = True
-        if updated:
-            db.session.commit()
+        # Do not accept or persist client-provided metadata flags (e.g. yt_disabled/title)
+        # Only track by YouTube video ID and fetch metadata from the YouTube API server-side.
         return jsonify({
             "id": video.id,
             "youtube_video_id": video.youtube_video_id,
@@ -182,16 +207,12 @@ def register_routes(app: Flask) -> None:
     @app.get("/api/videos")
     def list_videos():
         has_comments = (request.args.get("has_comments") or "1") not in ("0", "false", "False")
-        yt_disabled_param = request.args.get("yt_disabled")
         limit = int(request.args.get("limit", "50"))
         q = db.session.query(
             Video,
             db.func.count(Comment.id).label("comment_count"),
             db.func.max(Comment.created_at).label("last_comment_at"),
         ).outerjoin(Comment, Comment.video_id == Video.id).group_by(Video.id)
-        if yt_disabled_param is not None:
-            want = str(yt_disabled_param).lower() in ("1", "true", "yes", "y", "on")
-            q = q.filter(Video.yt_comments_disabled.is_(True) if want else Video.yt_comments_disabled.is_(False))
         if has_comments:
             q = q.having(db.func.count(Comment.id) > 0).order_by(db.func.max(Comment.created_at).desc())
         else:
@@ -300,12 +321,14 @@ def register_routes(app: Flask) -> None:
         if not video:
             # On first comment for a video, try to fetch metadata so we store channel info too
             meta = _fetch_youtube_video_meta(youtube_video_id)
+            yt_disabled = _detect_youtube_comments_disabled(youtube_video_id)
             video = Video(
                 youtube_video_id=youtube_video_id,
                 title=(meta or {}).get("title"),
                 channel_id=(meta or {}).get("channel_id"),
                 channel_title=(meta or {}).get("channel_title"),
                 thumbnail_url=(meta or {}).get("thumbnail_url"),
+                yt_comments_disabled=yt_disabled if yt_disabled is not None else None,
             )
             db.session.add(video)
             db.session.commit()

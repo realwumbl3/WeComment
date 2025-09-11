@@ -158,7 +158,7 @@
         if (!list) return;
         list.innerHTML = "<div>Loading…</div>";
         try {
-            const res = await fetch(`${backendBase}/api/videos?yt_disabled=1&limit=100`);
+            const res = await fetch(`${backendBase}/api/videos?limit=100`);
             const data = await res.json();
             const vids = data.videos || [];
             if (!vids.length) {
@@ -521,15 +521,9 @@
                 if (icon) icon.style.transform = isOpen ? "rotate(0deg)" : "rotate(90deg)";
             });
         }
-        // Track video once UI is injected
+        // Track video once UI is injected: only by ID, no client-provided flags
         if (currentVideoId) {
-            // Best-effort: send title if available
-            const titleEl = document.querySelector("h1.title, h1.ytd-watch-metadata, h1#title > yt-formatted-string");
-            const title = titleEl?.textContent?.trim() || "";
-            const ytFlag = ytDisabled ? 1 : 0;
-            fetch(
-                `${backendBase}/api/videos/${encodeURIComponent(currentVideoId)}?title=${encodeURIComponent(title)}&yt_disabled=${ytFlag}`
-            ).catch(() => {});
+            fetch(`${backendBase}/api/videos/${encodeURIComponent(currentVideoId)}`).catch(() => {});
         }
         document.getElementById("wecomment-sort")?.addEventListener("change", async (e) => {
             sortMode = e.target.value;
@@ -647,10 +641,7 @@
                 badge.textContent = "YouTube comments disabled";
                 headerLeft.appendChild(badge);
             }
-            // Notify backend best-effort
-            if (currentVideoId) {
-                fetch(`${backendBase}/api/videos/${encodeURIComponent(currentVideoId)}?yt_disabled=1`).catch(() => {});
-            }
+            // Do not notify backend about disabled state; backend determines from trusted sources
         }
     }
 
