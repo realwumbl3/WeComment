@@ -51,27 +51,63 @@
     function ensureSidebarItem() {
         const guide = document.querySelector("ytd-guide-renderer");
         if (!guide || document.getElementById("wec-sidebar-link")) return;
-        // Find the top nav section that contains Home/Shorts/Subscriptions
-        const topSection = guide.querySelector("ytd-guide-section-renderer:nth-of-type(1) #items");
-        const subsAnchor = guide.querySelector(
-            'ytd-guide-entry-renderer a[href*="/feed/subscriptions"], ytd-guide-entry-renderer a[title="Subscriptions"]'
-        );
-        const subsEntry = subsAnchor?.closest("ytd-guide-entry-renderer");
-        const insertParent = subsEntry?.parentElement || topSection;
-        if (!insertParent) return;
+
+        // Identify the Explore section in a language-agnostic way using stable hrefs
+        let insertParent = null;
+        const sections = guide.querySelectorAll("ytd-guide-section-renderer");
+        const KNOWN_EXPLORE_PATTERNS = [
+            "/gaming",
+            "/podcasts",
+            "/playables",
+            "/feed/storefront",
+            "/channel/UC-9-kyTW8ZkZNDHQJ6FgpwQ", // Music
+            "/channel/UC4R8DWoMoI7CAwX8_LjQHig", // Live
+            "/channel/UCYfdidRxbB8Qhf0Nx7ioOYw", // News
+            "/channel/UCEgdi0XIXXZ-qJOFPf4JSKw", // Sports
+            "/channel/UCtFRv9O2AHqOZjjynzrv-xg", // Learning
+        ];
+        let bestScore = 0;
+        let bestSection = null;
+        for (const section of sections) {
+            const links = Array.from(section.querySelectorAll("a[href]"));
+            let score = 0;
+            for (const a of links) {
+                const href = a.getAttribute("href") || "";
+                if (KNOWN_EXPLORE_PATTERNS.some((p) => href.includes(p))) score += 1;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                bestSection = section;
+            }
+        }
+        if (bestSection && bestScore > 0) {
+            insertParent = bestSection.querySelector("#items") || bestSection;
+        }
+        if (!insertParent) return; // Only insert inside Explore
+
+        // Ensure hover styles for our plain elements
+        if (!document.getElementById("wec-sidebar-css")) {
+            const style = document.createElement("style");
+            style.id = "wec-sidebar-css";
+            style.textContent = `
+      #wec-sidebar-link { display:flex; align-items:center; gap:12px; padding: 8px 0px 8px 12px; border-radius:12px; color: var(--yt-spec-text-primary); text-decoration:none; width: auto;}
+      #wec-sidebar-link:hover { background: var(--yt-spec-badge-chip-background, #222); }
+      #wec-sidebar-link .wec-title { font-size: 14px; }
+    `;
+            document.documentElement.appendChild(style);
+        }
 
         const item = document.createElement("ytd-guide-entry-renderer");
         item.innerHTML = `
-      <a id="wec-sidebar-link" class="style-scope ytd-guide-entry-renderer" href="#wec-hub" style="display:flex;align-items:center;gap:12px;padding:8px 16px;border-radius:8px;color:var(--yt-spec-text-primary);text-decoration:none;">
-        <span class="icon" style="display:inline-flex;width:24px;height:24px;"></span>
-        <span class="title">Comment Disabled Videos</span>
+      <a id="wec-sidebar-link" class="style-scope ytd-guide-entry-renderer" href="#wec-hub" role="link" title="Disabled Comments">
+        <span class="icon" style="display:inline-flex; width:24px; height:24px; margin-right:12px;"></span>
+        <span class="wec-title">Disabled Comments</span>
       </a>
     `;
-        if (subsEntry && subsEntry.nextSibling) {
-            insertParent.insertBefore(item, subsEntry.nextSibling);
-        } else {
-            insertParent.appendChild(item);
-        }
+        // Insert at the very top of the target section
+        if (insertParent.firstChild) insertParent.insertBefore(item, insertParent.firstChild);
+        else insertParent.appendChild(item);
+
         const link = item.querySelector("#wec-sidebar-link");
         try {
             const iconUrl = chrome.runtime.getURL("commenticon.svg");
@@ -529,11 +565,25 @@
     }
 
     function onUrlChanged() {
+        // Handle custom hub route via hash
+        const isHub = location.hash === "#wec-hub";
+        const hub = document.getElementById("wec-hub");
+        if (isHub) {
+            if (!hub) openHub();
+        } else if (hub) {
+            // Remove our custom hub when leaving
+            hub.remove();
+        }
+
+        // Always remove the injected comment container when navigating
+        const existing = document.getElementById("wecomment-container");
+        if (existing) existing.remove();
+
+        // Update video context and, if on a watch page, re-run DOM logic
         const vid = getVideoId();
-        if (vid && vid !== currentVideoId) {
-            currentVideoId = vid;
-            const existing = document.getElementById("wecomment-container");
-            if (existing) existing.remove();
+        const changed = vid !== currentVideoId;
+        currentVideoId = vid || null;
+        if (vid && changed) {
             onDomChanged();
         }
     }
@@ -542,6 +592,13 @@
         const mo = new MutationObserver(() => onDomChanged());
         mo.observe(document.documentElement, { childList: true, subtree: true });
 
+        // Listen to YouTube's SPA navigation events where available
+        window.addEventListener("yt-navigate", onUrlChanged);
+        window.addEventListener("yt-navigate-finish", onUrlChanged);
+        window.addEventListener("popstate", onUrlChanged);
+        window.addEventListener("hashchange", onUrlChanged);
+
+        // Fallback URL polling
         let lastUrl = location.href;
         setInterval(() => {
             if (location.href !== lastUrl) {
