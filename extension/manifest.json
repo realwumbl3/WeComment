@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "WeComment - Alternative YouTube Comments",
+  "version": "0.1.0",
+  "description": "Shows an alternative comment section when YouTube comments are turned off.",
+  "permissions": ["storage", "scripting"],
+  "host_permissions": [
+    "http://localhost:5000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WeComment"
+  },
+  "options_page": "options.html",
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["contentScript.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
+
+

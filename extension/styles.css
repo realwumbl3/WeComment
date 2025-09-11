@@ -1,0 +1,8 @@
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+.popup { padding: 12px; min-width: 320px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 8px 0; }
+input { padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+button { padding: 8px 12px; border: 1px solid #333; background: #111; color: #fff; border-radius: 6px; cursor: pointer; }
+h1 { font-size: 16px; margin: 0 0 8px; }
+
+
