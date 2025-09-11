@@ -1,5 +1,5 @@
 (() => {
-    const DEFAULT_BACKEND = "http://localhost:5000";
+    const DEFAULT_BACKEND = "https://wecomment.wumbl3.xyz";
     let authToken = null;
     let backendBase = DEFAULT_BACKEND;
     let currentVideoId = null;
