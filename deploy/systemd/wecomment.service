@@ -1,0 +1,22 @@
+[Unit]
+Description=WeComment Gunicorn
+After=network.target
+
+[Service]
+User=wumbl3priv
+Group=www-data
+WorkingDirectory=/home/wumbl3priv/Dev/WeComment
+
+ExecStart=/home/wumbl3priv/Dev/WeComment/.venv/bin/gunicorn \
+  -c backend/gunicorn.conf.py \
+  --bind unix:/home/wumbl3priv/Dev/WeComment/instance/wecomment.sock \
+  --pid /home/wumbl3priv/Dev/WeComment/instance/gunicorn.pid \
+  --error-logfile - --access-logfile - --log-level info
+
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+
+
