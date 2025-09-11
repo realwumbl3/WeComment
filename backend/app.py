@@ -30,11 +30,16 @@ def create_app() -> Flask:
         # Lightweight schema migration to add yt_comments_disabled if missing
         try:
             engine = db.engine
-            with engine.connect() as conn:
+            with engine.begin() as conn:
                 res = conn.execute(db.text("PRAGMA table_info(video)"))
                 cols = {row[1] for row in res.fetchall()} if res is not None else set()
                 if "yt_comments_disabled" not in cols:
                     conn.execute(db.text("ALTER TABLE video ADD COLUMN yt_comments_disabled BOOLEAN"))
+                    # Set existing entries to true since initial tracked videos had comments disabled
+                    conn.execute(db.text("UPDATE video SET yt_comments_disabled = 1"))
+                else:
+                    # Backfill any NULLs to true, in case the column already existed
+                    conn.execute(db.text("UPDATE video SET yt_comments_disabled = 1 WHERE yt_comments_disabled IS NULL"))
         except Exception:
             # Best-effort; ignore if cannot alter (e.g., permissions)
             pass

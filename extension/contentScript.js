@@ -620,15 +620,12 @@
         ensureSidebarItem();
         const existing = document.getElementById("wecomment-container");
         if (existing) return;
-        const offEl = queryCommentsTurnedOffElement();
         const commentsEl = document.querySelector("#comments");
-        if (offEl) {
-            // Under modified label
-            replaceCommentsTurnedOffText();
-            injectUI(offEl, { position: "after", ytDisabled: true, expanded: true });
-        } else if (commentsEl) {
-            // Above original comments
-            injectUI(commentsEl, { position: "before", ytDisabled: false, expanded: false });
+        if (commentsEl) {
+            const offEl = queryCommentsTurnedOffElement();
+            if (offEl) replaceCommentsTurnedOffText();
+            // Always place WeComment above native comments, under the metadata/merch block
+            injectUI(commentsEl, { position: "before", ytDisabled: !!offEl, expanded: !!offEl });
         }
     }
 
