@@ -13,6 +13,12 @@
   },
   "options_page": "options.html",
   "background": { "service_worker": "background.js" },
+  "web_accessible_resources": [
+    {
+      "resources": ["commenticon.svg"],
+      "matches": ["*://*.youtube.com/*"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": ["*://www.youtube.com/*"],

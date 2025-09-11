@@ -43,8 +43,8 @@
 
     const item = document.createElement('ytd-guide-entry-renderer');
     item.innerHTML = `
-      <a id="wec-sidebar-link" class="style-scope ytd-guide-entry-renderer" href="#wec-hub" style="display:flex;align-items:center;gap:12px;padding:8px 16px;border-radius:8px;color:var(--yt-spec-text-primary);">
-        <span class="icon" style="font-size:18px;">💬</span>
+      <a id="wec-sidebar-link" class="style-scope ytd-guide-entry-renderer" href="#wec-hub" style="display:flex;align-items:center;gap:12px;padding:8px 16px;border-radius:8px;color:var(--yt-spec-text-primary);text-decoration:none;">
+        <span class="icon" style="display:inline-flex;width:24px;height:24px;"></span>
         <span class="title">Comment Disabled Videos</span>
       </a>
     `;
@@ -53,7 +53,16 @@
     } else {
       insertParent.appendChild(item);
     }
-    item.querySelector('#wec-sidebar-link')?.addEventListener('click', (e) => {
+    const link = item.querySelector('#wec-sidebar-link');
+    try {
+      const iconUrl = chrome.runtime.getURL('commenticon.svg');
+      fetch(iconUrl).then(r => r.text()).then(svg => {
+        const iconSpan = link?.querySelector('.icon');
+        if (iconSpan) iconSpan.innerHTML = svg;
+      }).catch(() => {});
+    } catch (_) {}
+
+    link?.addEventListener('click', (e) => {
       e.preventDefault();
       openHub();
     });
@@ -69,14 +78,17 @@
     host.style.padding = '16px 24px';
     host.style.color = 'var(--yt-spec-text-primary, #fff)';
     host.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <h2 style="margin:0;font-size:22px;">Comment Disabled Videos</h2>
-        <div id="wec-hub-controls" style="display:flex;gap:8px;align-items:center;">
+      <div id="wec-hub-header" style="position:sticky;top:0;z-index:2;background:var(--yt-spec-base-background,#0f0f0f);padding:8px 0 10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <h2 style="margin:0;font-size:22px;">Comment Disabled Videos</h2>
+        </div>
+        <div id="wec-hub-sub" style="margin:8px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="opacity:.8;">Videos where WeComment has activity. Click a card to open the video.</div>
           <button id="wec-hub-refresh" style="padding:8px 12px;border:1px solid #333;border-radius:18px;background:#111;color:#fff;cursor:pointer;">Refresh</button>
         </div>
       </div>
-      <div style="margin:8px 0 16px;opacity:.8;">Videos where WeComment has activity. Click a card to open the video.</div>
-      <div id="wec-hub-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;"></div>
+      <div id="wec-hub-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+      </div>
     `;
     pageManager.appendChild(host);
     document.getElementById('wec-hub-refresh')?.addEventListener('click', loadHub);
