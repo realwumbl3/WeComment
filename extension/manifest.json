@@ -4,9 +4,6 @@
   "version": "0.1.0",
   "description": "Shows an alternative comment section when YouTube comments are turned off.",
   "permissions": ["storage", "scripting"],
-  "host_permissions": [
-    "http://localhost:5000/*"
-  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "WeComment"

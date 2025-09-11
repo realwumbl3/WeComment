@@ -158,7 +158,7 @@
         if (!list) return;
         list.innerHTML = "<div>Loading…</div>";
         try {
-            const res = await fetch(`${backendBase}/api/videos?has_comments=1&limit=100`);
+            const res = await fetch(`${backendBase}/api/videos?yt_disabled=1&limit=100`);
             const data = await res.json();
             const vids = data.videos || [];
             if (!vids.length) {
@@ -177,6 +177,7 @@
                     ? v.thumbnail_url
                     : `https://i.ytimg.com/vi/${encodeURIComponent(v.youtube_video_id)}/hqdefault.jpg`
             }" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+            <div style="position:absolute;left:8px;top:8px;background:rgba(58,42,0,.9);padding:2px 6px;border-radius:6px;font-size:12px;border:1px solid #5a4500;">YT disabled</div>
             <div style="position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.7);padding:2px 6px;border-radius:6px;font-size:12px;">${
                 v.comment_count || 0
             } comments</div>
@@ -196,7 +197,9 @@
         }
     }
 
-    function createContainer() {
+    function createContainer(opts) {
+        const expanded = !!(opts && opts.expanded);
+        const ytDisabled = !!(opts && opts.ytDisabled);
         const container = document.createElement("div");
         container.id = "wecomment-container";
         container.style.border = "1px solid var(--yt-spec-10-percent-layer, #303030)";
@@ -208,7 +211,11 @@
         container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <div style="display:flex;align-items:center;gap:12px;">
-          <div style="font-weight:600; font-size: 18px;">WeComment</div>
+          <button id="wecomment-toggle" aria-expanded="${expanded ? "true" : "false"}" style="all:unset;display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <div style="font-weight:600; font-size: 18px;">WeComment</div>
+            <span id="wecomment-toggle-icon" style="display:inline-block;transform:${expanded ? "rotate(90deg)" : "rotate(0deg)"};transition:transform .15s;opacity:.8;">▶</span>
+          </button>
+          ${ytDisabled ? `<span class="wec-badge">YouTube comments disabled</span>` : ""}
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.85;">
             <span>Sort</span>
             <select id="wecomment-sort" style="background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:6px;padding:4px 6px;">
@@ -219,8 +226,10 @@
         </div>
         <div id="wecomment-auth-area"></div>
       </div>
-      <div id="wecomment-compose" style="margin-top:12px;"></div>
-      <div id="wecomment-list" style="margin-top:12px;"></div>
+      <div id="wecomment-body" style="margin-top:12px; ${expanded ? "" : "display:none;"}">
+        <div id="wecomment-compose"></div>
+        <div id="wecomment-list" style="margin-top:12px;"></div>
+      </div>
     `;
         return container;
     }
@@ -235,7 +244,7 @@
       #wecomment-container .wec-header { display: flex; align-items: baseline; gap: 8px; }
       #wecomment-container .wec-author { font-weight: 600; font-size: 14px; }
       #wecomment-container .wec-time { font-size: 12px; opacity: .7; }
-      #wecomment-container .wec-text { margin-top: 6px; line-height: 1.5; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+      #wecomment-container .wec-text { margin-top: 6px; line-height: 1.5; font-size: 14px; white-space: pre-wrap; word-break: break-word; display: flex; flex-wrap: wrap; gap: 0.15em; }
       #wecomment-container .wec-actions { margin-top: 6px; display: flex; align-items: center; gap: 12px; color: var(--yt-spec-text-secondary, #aaa); }
       #wecomment-container .wec-button { background: transparent; border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 18px; }
       #wecomment-container .wec-button:hover { background: var(--yt-spec-badge-chip-background, #222); }
@@ -244,6 +253,7 @@
       #wecomment-container .wec-replybox textarea { width: 100%; max-width: 100%; box-sizing: border-box; resize: vertical; background: #0f0f0f; color: #fff; border: 1px solid #333; border-radius: 18px; padding: 10px 12px; }
       #wecomment-container .wec-replybox .wec-actions-line { margin-top: 8px; display: flex; gap: 8px; }
       #wecomment-container .wec-indent { margin-left: 52px; }
+      #wecomment-container .wec-badge { font-size: 11px; color:#ddd; background:#3a2a00; border:1px solid #5a4500; padding:2px 6px; border-radius:10px; }
     `;
         const style = document.createElement("style");
         style.textContent = css;
@@ -483,21 +493,38 @@
         }
     }
 
-    function injectUI(anchorEl) {
+    function injectUI(anchorEl, options) {
         if (!anchorEl) return;
         if (document.getElementById("wecomment-container")) return;
-        const container = createContainer();
-        anchorEl.parentElement?.insertBefore(container, anchorEl.nextSibling);
+        const position = (options && options.position) || "after"; // 'before' | 'after'
+        const ytDisabled = !!(options && options.ytDisabled);
+        const expanded = !!(options && options.expanded);
+        const container = createContainer({ expanded, ytDisabled });
+        const parent = anchorEl.parentElement;
+        if (!parent) return;
+        if (position === "before") parent.insertBefore(container, anchorEl);
+        else parent.insertBefore(container, anchorEl.nextSibling);
         injectStyles();
         renderAuthArea();
         renderComposer();
+        // Toggle collapse
+        const toggleBtn = document.getElementById("wecomment-toggle");
+        const body = document.getElementById("wecomment-body");
+        const icon = document.getElementById("wecomment-toggle-icon");
+        toggleBtn?.addEventListener("click", () => {
+            const isOpen = body && body.style.display !== "none";
+            if (body) body.style.display = isOpen ? "none" : "";
+            if (toggleBtn) toggleBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+            if (icon) icon.style.transform = isOpen ? "rotate(0deg)" : "rotate(90deg)";
+        });
         // Track video once UI is injected
         if (currentVideoId) {
             // Best-effort: send title if available
             const titleEl = document.querySelector("h1.title, h1.ytd-watch-metadata, h1#title > yt-formatted-string");
             const title = titleEl?.textContent?.trim() || "";
+            const ytFlag = ytDisabled ? 1 : 0;
             fetch(
-                `${backendBase}/api/videos/${encodeURIComponent(currentVideoId)}?title=${encodeURIComponent(title)}`
+                `${backendBase}/api/videos/${encodeURIComponent(currentVideoId)}?title=${encodeURIComponent(title)}&yt_disabled=${ytFlag}`
             ).catch(() => {});
         }
         document.getElementById("wecomment-sort")?.addEventListener("change", async (e) => {
@@ -590,10 +617,19 @@
     }
 
     function onDomChanged() {
-        const el = queryCommentsTurnedOffElement();
-        if (el) injectUI(el);
-        replaceCommentsTurnedOffText();
         ensureSidebarItem();
+        const existing = document.getElementById("wecomment-container");
+        if (existing) return;
+        const offEl = queryCommentsTurnedOffElement();
+        const commentsEl = document.querySelector("#comments");
+        if (offEl) {
+            // Under modified label
+            replaceCommentsTurnedOffText();
+            injectUI(offEl, { position: "after", ytDisabled: true, expanded: true });
+        } else if (commentsEl) {
+            // Above original comments
+            injectUI(commentsEl, { position: "before", ytDisabled: false, expanded: false });
+        }
     }
 
     function onUrlChanged() {

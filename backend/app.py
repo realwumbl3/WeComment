@@ -27,6 +27,17 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        # Lightweight schema migration to add yt_comments_disabled if missing
+        try:
+            engine = db.engine
+            with engine.connect() as conn:
+                res = conn.execute(db.text("PRAGMA table_info(video)"))
+                cols = {row[1] for row in res.fetchall()} if res is not None else set()
+                if "yt_comments_disabled" not in cols:
+                    conn.execute(db.text("ALTER TABLE video ADD COLUMN yt_comments_disabled BOOLEAN"))
+        except Exception:
+            # Best-effort; ignore if cannot alter (e.g., permissions)
+            pass
 
     register_routes(app)
     return app
@@ -48,6 +59,7 @@ class Video(db.Model):
     channel_id = db.Column(db.String(128))
     channel_title = db.Column(db.String(255))
     thumbnail_url = db.Column(db.String(1024))
+    yt_comments_disabled = db.Column(db.Boolean, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -145,6 +157,20 @@ def register_routes(app: Flask) -> None:
             )
             db.session.add(video)
             db.session.commit()
+        # Optionally update title and yt_disabled via query params when tracking
+        updated = False
+        title = request.args.get("title")
+        if title and title != video.title:
+            video.title = title
+            updated = True
+        yt_disabled_val = request.args.get("yt_disabled")
+        if yt_disabled_val is not None:
+            val = str(yt_disabled_val).lower() in ("1", "true", "yes", "y", "on")
+            if video.yt_comments_disabled is None or bool(video.yt_comments_disabled) != val:
+                video.yt_comments_disabled = val
+                updated = True
+        if updated:
+            db.session.commit()
         return jsonify({
             "id": video.id,
             "youtube_video_id": video.youtube_video_id,
@@ -152,18 +178,23 @@ def register_routes(app: Flask) -> None:
             "channel_id": video.channel_id,
             "channel_title": video.channel_title,
             "thumbnail_url": video.thumbnail_url,
+            "yt_comments_disabled": bool(video.yt_comments_disabled) if video.yt_comments_disabled is not None else None,
             "created_at": video.created_at.isoformat(),
         })
 
     @app.get("/api/videos")
     def list_videos():
         has_comments = (request.args.get("has_comments") or "1") not in ("0", "false", "False")
+        yt_disabled_param = request.args.get("yt_disabled")
         limit = int(request.args.get("limit", "50"))
         q = db.session.query(
             Video,
             db.func.count(Comment.id).label("comment_count"),
             db.func.max(Comment.created_at).label("last_comment_at"),
         ).outerjoin(Comment, Comment.video_id == Video.id).group_by(Video.id)
+        if yt_disabled_param is not None:
+            want = str(yt_disabled_param).lower() in ("1", "true", "yes", "y", "on")
+            q = q.filter(Video.yt_comments_disabled.is_(True) if want else Video.yt_comments_disabled.is_(False))
         if has_comments:
             q = q.having(db.func.count(Comment.id) > 0).order_by(db.func.max(Comment.created_at).desc())
         else:
@@ -177,6 +208,7 @@ def register_routes(app: Flask) -> None:
                     "channel_id": r.Video.channel_id,
                     "channel_title": r.Video.channel_title,
                     "thumbnail_url": r.Video.thumbnail_url,
+                    "yt_comments_disabled": bool(r.Video.yt_comments_disabled) if r.Video.yt_comments_disabled is not None else None,
                     "comment_count": int(r.comment_count or 0),
                     "last_comment_at": r.last_comment_at.isoformat() if r.last_comment_at else None,
                 }
