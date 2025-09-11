@@ -269,7 +269,15 @@ def register_routes(app: Flask) -> None:
         parent_obj = None
         video = Video.query.filter_by(youtube_video_id=youtube_video_id).first()
         if not video:
-            video = Video(youtube_video_id=youtube_video_id)
+            # On first comment for a video, try to fetch metadata so we store channel info too
+            meta = _fetch_youtube_video_meta(youtube_video_id)
+            video = Video(
+                youtube_video_id=youtube_video_id,
+                title=(meta or {}).get("title"),
+                channel_id=(meta or {}).get("channel_id"),
+                channel_title=(meta or {}).get("channel_title"),
+                thumbnail_url=(meta or {}).get("thumbnail_url"),
+            )
             db.session.add(video)
             db.session.commit()
         if parent_id:

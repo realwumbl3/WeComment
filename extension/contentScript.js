@@ -185,6 +185,7 @@
             <div style="font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;overflow:hidden;-webkit-box-orient:vertical;">${escapeHtml(
                 v.title || v.youtube_video_id
             )}</div>
+            <div style="margin-top:4px;font-size:13px;opacity:.8;display:-webkit-box;-webkit-line-clamp:1;overflow:hidden;-webkit-box-orient:vertical;">${escapeHtml(v.channel_title || "")}</div>
           </div>
         </a>
       `
@@ -207,7 +208,7 @@
         container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <div style="display:flex;align-items:center;gap:12px;">
-          <div style="font-weight:600;">WeComment</div>
+          <div style="font-weight:600; font-size: 18px;">WeComment</div>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.85;">
             <span>Sort</span>
             <select id="wecomment-sort" style="background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:6px;padding:4px 6px;">
@@ -311,7 +312,7 @@
                 <span class="wec-author">${escapeHtml(c.user?.name || "User")}</span>
                 <span class="wec-time">${new Date(c.created_at).toLocaleString()}</span>
               </div>
-              <div class="wec-text">${escapeHtml(c.text)}</div>
+              <div class="wec-text">${renderTextWithEmoji(c.text)}</div>
               <div class="wec-actions">
                 <button class="wec-button wec-vote ${c.user_voted ? "is-active" : ""}" data-act="vote">👍</button>
                 <span class="wec-score" data-role="score">${formatCount(c.score || 0)}</span>
@@ -332,6 +333,37 @@
         }
 
         list.innerHTML = roots.map((c) => itemHtml(c, 0)).join("");
+    }
+
+    // Convert flag emoji sequences to Twemoji SVG images for consistent rendering on all platforms
+    function renderTextWithEmoji(text) {
+        const input = String(text || "");
+        let out = "";
+        for (let i = 0; i < input.length; ) {
+            const codePoint = input.codePointAt(i);
+            const char = String.fromCodePoint(codePoint);
+            const isRegional = codePoint >= 0x1f1e6 && codePoint <= 0x1f1ff;
+            if (isRegional) {
+                const nextIndex = i + char.length;
+                if (nextIndex < input.length) {
+                    const codePoint2 = input.codePointAt(nextIndex);
+                    const char2 = String.fromCodePoint(codePoint2);
+                    const isRegional2 = codePoint2 >= 0x1f1e6 && codePoint2 <= 0x1f1ff;
+                    if (isRegional2) {
+                        const hex1 = codePoint.toString(16);
+                        const hex2 = codePoint2.toString(16);
+                        const emoji = char + char2;
+                        const src = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/${hex1}-${hex2}.svg`;
+                        out += `<img src="${src}" alt="${escapeHtml(emoji)}" draggable="false" style="height:1em;width:1em;vertical-align:-0.12em;"/>`;
+                        i = nextIndex + char2.length;
+                        continue;
+                    }
+                }
+            }
+            out += escapeHtml(char);
+            i += char.length;
+        }
+        return out;
     }
 
     function escapeHtml(str) {
