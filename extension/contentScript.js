@@ -208,13 +208,15 @@
         container.style.margin = "12px 0";
         container.style.background = "var(--yt-spec-additive-background, #121212)";
         container.style.color = "var(--yt-spec-text-primary, #fff)";
+        container.dataset.ytDisabled = ytDisabled ? "1" : "0";
+        const headerTitleHtml = ytDisabled
+            ? `<div style="font-weight:600; font-size: 18px;">WeComment</div>`
+            : `<button id=\"wecomment-toggle\" aria-expanded=\"${expanded ? "true" : "false"}\" style=\"all:unset;display:flex;align-items:center;gap:8px;cursor:pointer;\">\n             <div style=\"font-weight:600; font-size: 18px;\">WeComment</div>\n             <span id=\"wecomment-toggle-icon\" style=\"display:inline-block;transform:${expanded ? "rotate(90deg)" : "rotate(0deg)"};transition:transform .15s;opacity:.8;\">▶</span>\n           </button>`;
+        const bodyDisplay = ytDisabled || expanded ? "" : "display:none;";
         container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <button id="wecomment-toggle" aria-expanded="${expanded ? "true" : "false"}" style="all:unset;display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <div style="font-weight:600; font-size: 18px;">WeComment</div>
-            <span id="wecomment-toggle-icon" style="display:inline-block;transform:${expanded ? "rotate(90deg)" : "rotate(0deg)"};transition:transform .15s;opacity:.8;">▶</span>
-          </button>
+        <div id="wecomment-header-left" style="display:flex;align-items:center;gap:12px;">
+          ${headerTitleHtml}
           ${ytDisabled ? `<span class="wec-badge">YouTube comments disabled</span>` : ""}
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.85;">
             <span>Sort</span>
@@ -226,7 +228,7 @@
         </div>
         <div id="wecomment-auth-area"></div>
       </div>
-      <div id="wecomment-body" style="margin-top:12px; ${expanded ? "" : "display:none;"}">
+      <div id="wecomment-body" style="margin-top:12px; ${bodyDisplay}">
         <div id="wecomment-compose"></div>
         <div id="wecomment-list" style="margin-top:12px;"></div>
       </div>
@@ -511,12 +513,14 @@
         const toggleBtn = document.getElementById("wecomment-toggle");
         const body = document.getElementById("wecomment-body");
         const icon = document.getElementById("wecomment-toggle-icon");
-        toggleBtn?.addEventListener("click", () => {
-            const isOpen = body && body.style.display !== "none";
-            if (body) body.style.display = isOpen ? "none" : "";
-            if (toggleBtn) toggleBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
-            if (icon) icon.style.transform = isOpen ? "rotate(0deg)" : "rotate(90deg)";
-        });
+        if (!ytDisabled && toggleBtn) {
+            toggleBtn.addEventListener("click", () => {
+                const isOpen = body && body.style.display !== "none";
+                if (body) body.style.display = isOpen ? "none" : "";
+                toggleBtn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+                if (icon) icon.style.transform = isOpen ? "rotate(0deg)" : "rotate(90deg)";
+            });
+        }
         // Track video once UI is injected
         if (currentVideoId) {
             // Best-effort: send title if available
@@ -616,16 +620,55 @@
         }
     }
 
+    function reconcileDisabledState() {
+        const container = document.getElementById("wecomment-container");
+        if (!container) return;
+        const hasOff = !!queryCommentsTurnedOffElement();
+        const marked = container.dataset.ytDisabled === "1";
+        if (hasOff && !marked) {
+            container.dataset.ytDisabled = "1";
+            // Ensure body is visible
+            const body = document.getElementById("wecomment-body");
+            if (body) body.style.display = "";
+            // Replace toggle with static title if present
+            const toggleBtn = document.getElementById("wecomment-toggle");
+            if (toggleBtn) {
+                const staticTitle = document.createElement("div");
+                staticTitle.style.fontWeight = "600";
+                staticTitle.style.fontSize = "18px";
+                staticTitle.textContent = "WeComment";
+                toggleBtn.replaceWith(staticTitle);
+            }
+            // Add badge if missing
+            const headerLeft = document.getElementById("wecomment-header-left");
+            if (headerLeft && !headerLeft.querySelector(".wec-badge")) {
+                const badge = document.createElement("span");
+                badge.className = "wec-badge";
+                badge.textContent = "YouTube comments disabled";
+                headerLeft.appendChild(badge);
+            }
+            // Notify backend best-effort
+            if (currentVideoId) {
+                fetch(`${backendBase}/api/videos/${encodeURIComponent(currentVideoId)}?yt_disabled=1`).catch(() => {});
+            }
+        }
+    }
+
     function onDomChanged() {
         ensureSidebarItem();
         const existing = document.getElementById("wecomment-container");
-        if (existing) return;
+        if (existing) {
+            reconcileDisabledState();
+            return;
+        }
         const commentsEl = document.querySelector("#comments");
         if (commentsEl) {
             const offEl = queryCommentsTurnedOffElement();
             if (offEl) replaceCommentsTurnedOffText();
             // Always place WeComment above native comments, under the metadata/merch block
             injectUI(commentsEl, { position: "before", ytDisabled: !!offEl, expanded: !!offEl });
+            // In case the off message appears after injection, reconcile later as DOM settles
+            setTimeout(reconcileDisabledState, 800);
         }
     }
 
