@@ -196,9 +196,9 @@
       #wecomment-container .wec-row { display: grid; grid-template-columns: 40px 1fr; gap: 12px; }
       #wecomment-container .wec-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #333; }
       #wecomment-container .wec-header { display: flex; align-items: baseline; gap: 8px; }
-      #wecomment-container .wec-author { font-weight: 600; }
+      #wecomment-container .wec-author { font-weight: 600; font-size: 14px; }
       #wecomment-container .wec-time { font-size: 12px; opacity: .7; }
-      #wecomment-container .wec-text { margin-top: 6px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+      #wecomment-container .wec-text { margin-top: 6px; line-height: 1.5; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
       #wecomment-container .wec-actions { margin-top: 6px; display: flex; align-items: center; gap: 12px; color: var(--yt-spec-text-secondary, #aaa); }
       #wecomment-container .wec-button { background: transparent; border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 18px; }
       #wecomment-container .wec-button:hover { background: var(--yt-spec-badge-chip-background, #222); }
