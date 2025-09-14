@@ -184,10 +184,10 @@
             } comments</div>
           </div>
           <div style="padding:10px 12px;">
+          <div style="margin-top:4px;font-size:13px;opacity:.8;display:-webkit-box;-webkit-line-clamp:1;overflow:hidden;-webkit-box-orient:vertical;">${escapeHtml(v.channel_title || "")}</div>
             <div style="font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;overflow:hidden;-webkit-box-orient:vertical;">${escapeHtml(
                 v.title || v.youtube_video_id
             )}</div>
-            <div style="margin-top:4px;font-size:13px;opacity:.8;display:-webkit-box;-webkit-line-clamp:1;overflow:hidden;-webkit-box-orient:vertical;">${escapeHtml(v.channel_title || "")}</div>
           </div>
         </a>
       `
