@@ -362,28 +362,6 @@
         }
 
         list.innerHTML = roots.map((c) => itemHtml(c, 0)).join("");
-        // Verify edited badges actually have history; remove if none (defensive)
-        const items = Array.from(list.querySelectorAll(".wec-item"));
-        items.forEach((el) => {
-            const badge = el.querySelector(".wec-edited");
-            if (!badge) return;
-            const id = el.getAttribute("data-id");
-            if (!id) return;
-            fetch(`${backendBase}/api/comments/${id}/versions`)
-                .then((res) => res.json())
-                .then((data) => {
-                    const versions = Array.isArray(data.versions) ? data.versions : [];
-                    if (!versions.length) {
-                        badge.remove();
-                        const hist = el.querySelector(".wec-history");
-                        if (hist) {
-                            hist.style.display = "none";
-                            hist.innerHTML = "";
-                        }
-                    }
-                })
-                .catch(() => {});
-        });
     }
 
     // Convert flag emoji sequences to Twemoji SVG images for consistent rendering on all platforms
