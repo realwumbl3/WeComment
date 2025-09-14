@@ -313,9 +313,9 @@
         }
         function itemHtml(c, level) {
             const indentClass = level > 0 ? "wec-indent" : "";
-            const editedBadge = c.edited ? `<span class="wec-edited" title="Edited">(edited)</span>` : "";
+            const editedBadge = c.edited ? `<button class="wec-edited" data-act="toggle-history" title="View edit history">(edited)</button>` : "";
             const ownerActions = c.can_edit
-                ? `<button class="wec-button" data-act="edit">Edit</button><button class="wec-button" data-act="history">History</button>`
+                ? `<button class="wec-button" data-act="edit">Edit</button>`
                 : "";
             return `
         <div class="wec-item ${indentClass}" data-id="${c.id}">
@@ -674,7 +674,7 @@
                     } catch (e) {
                         console.warn("WeComment: edit failed", e);
                     }
-                } else if (act === "history") {
+                } else if (act === "toggle-history") {
                     const historyEl = root.querySelector(".wec-history");
                     if (!historyEl) return;
                     const isOpen = historyEl.style.display !== "none";

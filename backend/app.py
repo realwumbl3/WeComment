@@ -274,6 +274,16 @@ def register_routes(app: Flask) -> None:
             for cid, count in db.session.query(Vote.comment_id, db.func.count(Vote.id)).filter(Vote.comment_id.in_(comment_ids)).group_by(Vote.comment_id):
                 scores[cid] = int(count)
 
+        # Gather edit counts to determine edited flag strictly by audit records
+        edit_counts = {cid: 0 for cid in comment_ids}
+        if comment_ids:
+            for cid, count in (
+                db.session.query(CommentEdit.comment_id, db.func.count(CommentEdit.id))
+                .filter(CommentEdit.comment_id.in_(comment_ids))
+                .group_by(CommentEdit.comment_id)
+            ):
+                edit_counts[cid] = int(count)
+
         user_votes = set()
         if current_user and comment_ids:
             user_votes = {
@@ -290,7 +300,7 @@ def register_routes(app: Flask) -> None:
                 "parent_id": r.Comment.parent_id,
                 "score": scores.get(r.Comment.id, 0),
                 "user_voted": r.Comment.id in user_votes,
-                "edited": (r.Comment.updated_at and r.Comment.updated_at > r.Comment.created_at),
+                "edited": bool(edit_counts.get(r.Comment.id, 0) > 0),
                 "can_edit": bool(current_user and current_user.id == r.Comment.user_id),
                 "user": {
                     "id": r.User.id,
