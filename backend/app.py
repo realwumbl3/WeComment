@@ -78,6 +78,15 @@ class Vote(db.Model):
     __table_args__ = (db.UniqueConstraint("comment_id", "user_id", name="uq_vote_comment_user"),)
 
 
+class CommentEdit(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey("comment.id"), nullable=False, index=True)
+    editor_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    previous_text = db.Column(db.Text, nullable=False)
+    new_text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 def _issue_jwt(user: User) -> str:
     import jwt
 
@@ -281,6 +290,8 @@ def register_routes(app: Flask) -> None:
                 "parent_id": r.Comment.parent_id,
                 "score": scores.get(r.Comment.id, 0),
                 "user_voted": r.Comment.id in user_votes,
+                "edited": (r.Comment.updated_at and r.Comment.updated_at > r.Comment.created_at),
+                "can_edit": bool(current_user and current_user.id == r.Comment.user_id),
                 "user": {
                     "id": r.User.id,
                     "name": r.User.name,
@@ -369,6 +380,62 @@ def register_routes(app: Flask) -> None:
             voted = True
         score = db.session.query(db.func.count(Vote.id)).filter(Vote.comment_id == comment_id).scalar() or 0
         return jsonify({"voted": voted, "score": int(score)})
+
+    @app.post("/api/comments/<int:comment_id>/edit")
+    def edit_comment(comment_id: int):
+        user = _require_auth()
+        if not user:
+            return jsonify({"error": "unauthorized"}), 401
+        comment = db.session.get(Comment, comment_id)
+        if not comment:
+            return jsonify({"error": "not_found"}), 404
+        if comment.user_id != user.id:
+            return jsonify({"error": "forbidden"}), 403
+        data = request.get_json() or {}
+        new_text = (data.get("text") or "").strip()
+        if not new_text:
+            return jsonify({"error": "text_required"}), 400
+        if new_text == comment.text:
+            return jsonify({"ok": True, "unchanged": True})
+        edit = CommentEdit(
+            comment_id=comment.id,
+            editor_user_id=user.id,
+            previous_text=comment.text,
+            new_text=new_text,
+        )
+        comment.text = new_text
+        db.session.add(edit)
+        db.session.commit()
+        return jsonify({"ok": True})
+
+    @app.get("/api/comments/<int:comment_id>/versions")
+    def comment_versions(comment_id: int):
+        comment = db.session.get(Comment, comment_id)
+        if not comment:
+            return jsonify({"error": "not_found"}), 404
+        edits = (
+            db.session.query(CommentEdit, User)
+            .join(User, User.id == CommentEdit.editor_user_id)
+            .filter(CommentEdit.comment_id == comment_id)
+            .order_by(CommentEdit.created_at.desc())
+            .all()
+        )
+        return jsonify({
+            "versions": [
+                {
+                    "id": e.CommentEdit.id,
+                    "previous_text": e.CommentEdit.previous_text,
+                    "new_text": e.CommentEdit.new_text,
+                    "created_at": e.CommentEdit.created_at.isoformat(),
+                    "editor": {
+                        "id": e.User.id,
+                        "name": e.User.name,
+                        "picture": e.User.picture,
+                    },
+                }
+                for e in edits
+            ]
+        })
 
     # Google OAuth using Authorization Code with PKCE (server-side)
     @app.get("/auth/google/start")

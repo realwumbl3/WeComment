@@ -257,6 +257,9 @@
       #wecomment-container .wec-replybox .wec-actions-line { margin-top: 8px; display: flex; gap: 8px; }
       #wecomment-container .wec-indent { margin-left: 52px; }
       #wecomment-container .wec-badge { font-size: 11px; color:#ddd; background:#3a2a00; border:1px solid #5a4500; padding:2px 6px; border-radius:10px; }
+      #wecomment-container .wec-edited { font-size: 12px; opacity: .6; margin-left: 6px; }
+      #wecomment-container .wec-editbox textarea { width: 100%; max-width: 100%; box-sizing: border-box; resize: vertical; background: #0f0f0f; color: #fff; border: 1px solid #333; border-radius: 8px; padding: 8px; }
+      #wecomment-container .wec-history { border-top: 1px dashed #333; padding-top: 6px; }
     `;
         const style = document.createElement("style");
         style.textContent = css;
@@ -310,6 +313,10 @@
         }
         function itemHtml(c, level) {
             const indentClass = level > 0 ? "wec-indent" : "";
+            const editedBadge = c.edited ? `<span class="wec-edited" title="Edited">(edited)</span>` : "";
+            const ownerActions = c.can_edit
+                ? `<button class="wec-button" data-act="edit">Edit</button><button class="wec-button" data-act="history">History</button>`
+                : "";
             return `
         <div class="wec-item ${indentClass}" data-id="${c.id}">
           <div class="wec-row">
@@ -323,13 +330,21 @@
             <div>
               <div class="wec-header">
                 <span class="wec-author">${escapeHtml(c.user?.name || "User")}</span>
-                <span class="wec-time">${new Date(c.created_at).toLocaleString()}</span>
+                <span class="wec-time">${new Date(c.created_at).toLocaleString()} ${editedBadge}</span>
               </div>
               <div class="wec-text">${renderTextWithEmoji(c.text)}</div>
+              <div class="wec-editbox" style="display:none;">
+                <textarea rows="3" placeholder="Edit your comment..."></textarea>
+                <div class="wec-actions-line">
+                  <button class="wec-button" data-act="save-edit">Save</button>
+                  <button class="wec-button" data-act="cancel-edit">Cancel</button>
+                </div>
+              </div>
               <div class="wec-actions">
                 <button class="wec-button wec-vote ${c.user_voted ? "is-active" : ""}" data-act="vote">👍</button>
                 <span class="wec-score" data-role="score">${formatCount(c.score || 0)}</span>
                 <button class="wec-button" data-act="reply">Reply</button>
+                ${ownerActions}
               </div>
               <div class="wec-replybox" style="display:none;">
                 <textarea rows="2" placeholder="Write a reply..."></textarea>
@@ -338,6 +353,7 @@
                   <button class="wec-button" data-act="cancel-reply">Cancel</button>
                 </div>
               </div>
+              <div class="wec-history" style="display:none; margin-top:8px;"></div>
             </div>
           </div>
         </div>
@@ -606,6 +622,99 @@
                         }
                     } catch (e) {
                         console.warn("WeComment: reply failed", e);
+                    }
+                } else if (act === "edit") {
+                    const textEl = root.querySelector(".wec-text");
+                    const editBox = root.querySelector(".wec-editbox");
+                    const ta = editBox?.querySelector("textarea");
+                    if (textEl && editBox && ta) {
+                        ta.value = textEl.textContent || "";
+                        textEl.style.display = "none";
+                        editBox.style.display = "block";
+                    }
+                } else if (act === "cancel-edit") {
+                    const textEl = root.querySelector(".wec-text");
+                    const editBox = root.querySelector(".wec-editbox");
+                    if (textEl && editBox) {
+                        editBox.style.display = "none";
+                        textEl.style.display = "";
+                    }
+                } else if (act === "save-edit") {
+                    if (!authToken) {
+                        alert("Please sign in first.");
+                        return;
+                    }
+                    const textEl = root.querySelector(".wec-text");
+                    const timeEl = root.querySelector(".wec-time");
+                    const editBox = root.querySelector(".wec-editbox");
+                    const ta = editBox?.querySelector("textarea");
+                    const newText = (ta?.value || "").trim();
+                    if (!newText) return;
+                    try {
+                        const res = await fetch(`${backendBase}/api/comments/${commentId}/edit`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+                            body: JSON.stringify({ text: newText }),
+                        });
+                        if (res.ok) {
+                            if (textEl) textEl.innerHTML = renderTextWithEmoji(newText);
+                            if (editBox && textEl) {
+                                editBox.style.display = "none";
+                                textEl.style.display = "";
+                            }
+                            if (timeEl && !timeEl.textContent.includes("edited")) {
+                                timeEl.innerHTML = `${timeEl.textContent} <span class="wec-edited" title="Edited">(edited)</span>`;
+                            }
+                        } else if (res.status === 401) {
+                            alert("Session expired. Please sign in again.");
+                            authToken = null;
+                            await chrome.storage.local.remove("wecomment_token");
+                            renderAuthArea();
+                        }
+                    } catch (e) {
+                        console.warn("WeComment: edit failed", e);
+                    }
+                } else if (act === "history") {
+                    const historyEl = root.querySelector(".wec-history");
+                    if (!historyEl) return;
+                    const isOpen = historyEl.style.display !== "none";
+                    if (isOpen) {
+                        historyEl.style.display = "none";
+                        historyEl.innerHTML = "";
+                        return;
+                    }
+                    historyEl.style.display = "block";
+                    historyEl.innerHTML = '<div style="opacity:.8">Loading history…</div>';
+                    try {
+                        const res = await fetch(`${backendBase}/api/comments/${commentId}/versions`);
+                        const data = await res.json();
+                        const versions = Array.isArray(data.versions) ? data.versions : [];
+                        if (!versions.length) {
+                            historyEl.innerHTML = '<div style="opacity:.8">No edits yet.</div>';
+                        } else {
+                            historyEl.innerHTML = versions
+                                .map(
+                                    (v) => `
+                          <div style="border-left:2px solid #333; padding-left:8px; margin:6px 0;">
+                            <div style="font-size:12px;opacity:.8;display:flex;align-items:center;gap:6px;">
+                              <img src="${v.editor?.picture || ""}" style="width:14px;height:14px;border-radius:50%;object-fit:cover;background:#333;"/>
+                              <span>${escapeHtml(v.editor?.name || "User")}</span>
+                              <span>${new Date(v.created_at).toLocaleString()}</span>
+                            </div>
+                            <div style="margin-top:4px;">
+                              <div style="font-size:12px;opacity:.8;">Before:</div>
+                              <div class="wec-text">${renderTextWithEmoji(v.previous_text)}</div>
+                            </div>
+                            <div style="margin-top:4px;">
+                              <div style="font-size:12px;opacity:.8;">After:</div>
+                              <div class="wec-text">${renderTextWithEmoji(v.new_text)}</div>
+                            </div>
+                          </div>`
+                                )
+                                .join("");
+                        }
+                    } catch (e) {
+                        historyEl.innerHTML = '<div style="opacity:.8">Failed to load history.</div>';
                     }
                 }
             });
